@@ -36,11 +36,10 @@
         <section class="auth-layout" data-auth-screen hidden>
           <article class="warded-panel lore-panel">
             <p class="eyebrow">Sealed Threshold</p>
-            <h2>두 개의 채팅 관문을 한 공간 안에 엮은 프로토타입</h2>
+            <h2>입장 방식을 선택한 뒤 채팅을 시작하세요</h2>
             <p class="lead-copy">
-              일반 채팅은 친구 관계 위에서 열리고, 랜덤 채팅은 익명 닉네임으로 시작됩니다.
-              이 프로토타입은 로그인부터 친구 요청, 일반 1:1 채팅, 랜덤 1:1 매칭, 신고와 차단,
-              그리고 테마 전환까지 브라우저 안에서 직접 작동합니다.
+              게스트는 바로 랜덤 채팅에 들어가고, 회원은 로그인 또는 회원가입 후 일반 채팅과
+              랜덤 채팅을 모두 사용할 수 있습니다.
             </p>
 
             <div class="ritual-list">
@@ -72,18 +71,48 @@
             <div class="panel-head">
               <div>
                 <p class="eyebrow">Access Altar</p>
-                <h2>대화창으로 연결 중</h2>
+                <h2 data-auth-title>게스트 또는 회원 입장</h2>
               </div>
             </div>
 
             <p class="lead-copy auth-loading-copy" data-auth-status>
-              로그인창 없이 바로 게스트 모드로 입장하는 중입니다.
+              연결이 실패하면 게스트 재시도를 사용할 수 있습니다.
             </p>
 
-            <button class="ghost-button auth-guest-button" type="button" data-retry-guest hidden>다시 시도</button>
+            <button class="ghost-button auth-guest-button" type="button" data-retry-guest hidden>게스트 다시 시도</button>
+
+            <div class="segmented-control" role="tablist" aria-label="회원 인증 모드" data-member-auth-tabs>
+              <button class="segment-button is-active" type="button" data-member-auth-mode="signin">로그인</button>
+              <button class="segment-button" type="button" data-member-auth-mode="signup">회원가입</button>
+            </div>
+
+            <form class="stack-form" data-member-auth-form>
+              <label>
+                <span>이메일</span>
+                <input type="email" name="email" autocomplete="email" />
+              </label>
+              <label>
+                <span>비밀번호</span>
+                <input type="password" name="password" autocomplete="current-password" minlength="4" />
+              </label>
+              <label data-member-signup-field hidden>
+                <span>표시 이름</span>
+                <input type="text" name="displayName" minlength="2" maxlength="20" placeholder="예: 달빛서기" />
+              </label>
+              <label data-member-signup-field hidden>
+                <span>사용자 아이디</span>
+                <input type="text" name="username" minlength="3" maxlength="18" placeholder="예: moon_scribe" />
+              </label>
+              <button class="primary-button" type="submit" data-member-auth-submit>로그인</button>
+            </form>
+
+            <div class="notice-block" data-member-auth-status>
+              <strong>현재 상태</strong>
+              <p>게스트는 익명 랜덤 채팅만 가능하고, 회원은 일반 채팅과 친구 기능까지 사용할 수 있습니다.</p>
+            </div>
 
             <p class="hint-copy">
-              연결이 실패하면 Supabase의 Anonymous Sign-Ins 설정을 확인해야 합니다.
+              게스트 연결이 실패하면 Supabase의 Anonymous Sign-Ins 설정을 확인하세요.
             </p>
           </article>
         </section>
@@ -280,45 +309,6 @@
 
             <section class="view-section" data-view="profile">
               <div class="content-grid profile-grid">
-                <article class="warded-panel auth-member-panel" hidden>
-                  <div class="panel-head">
-                    <div>
-                      <p class="eyebrow">Account Access</p>
-                      <h2 data-member-auth-title>회원 계정 연결</h2>
-                    </div>
-                  </div>
-
-                  <div class="segmented-control" role="tablist" aria-label="회원 인증 모드" data-member-auth-tabs>
-                    <button class="segment-button is-active" type="button" data-member-auth-mode="signin">로그인</button>
-                    <button class="segment-button" type="button" data-member-auth-mode="signup">회원가입</button>
-                  </div>
-
-                  <form class="stack-form" data-member-auth-form>
-                    <label>
-                      <span>이메일</span>
-                      <input type="email" name="email" autocomplete="email" />
-                    </label>
-                    <label>
-                      <span>비밀번호</span>
-                      <input type="password" name="password" autocomplete="current-password" minlength="4" />
-                    </label>
-                    <label data-member-signup-field hidden>
-                      <span>표시 이름</span>
-                      <input type="text" name="displayName" minlength="2" maxlength="20" placeholder="예: 달빛서기" />
-                    </label>
-                    <label data-member-signup-field hidden>
-                      <span>사용자 아이디</span>
-                      <input type="text" name="username" minlength="3" maxlength="18" placeholder="예: moon_scribe" />
-                    </label>
-                    <button class="primary-button" type="submit" data-member-auth-submit>로그인</button>
-                  </form>
-
-                  <div class="notice-block" data-member-auth-status>
-                    <strong>현재 상태</strong>
-                    <p>게스트 모드에서는 랜덤 채팅만 가능합니다. 회원 계정으로 로그인하면 일반 채팅과 친구 기능을 사용할 수 있습니다.</p>
-                  </div>
-                </article>
-
                 <article class="warded-panel profile-panel">
                   <div class="panel-head">
                     <div>

@@ -382,7 +382,7 @@ async function ensureGuestSession(forceRetry = false) {
   }
 
   const suffix = randomLabel();
-  const { error } = await supabaseClient.auth.signInAnonymously({
+  const { data, error } = await supabaseClient.auth.signInAnonymously({
     options: {
       data: {
         display_name: `게스트 ${suffix}`,
@@ -395,7 +395,42 @@ async function ensureGuestSession(forceRetry = false) {
   if (error) {
     elements.sessionLabel.textContent = "게스트 연결 실패";
     showToast(getReadableError(error));
+    return;
   }
+
+  const directSession = data?.session;
+  if (directSession) {
+    await handleSessionChange(directSession);
+    return;
+  }
+
+  const session = await waitForSession();
+  if (session) {
+    await handleSessionChange(session);
+    return;
+  }
+
+  elements.sessionLabel.textContent = "게스트 연결 실패";
+  showToast("게스트 세션을 확인하지 못했습니다. 다시 시도해 주세요.");
+}
+
+async function waitForSession() {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const {
+      data: { session },
+    } = await supabaseClient.auth.getSession();
+    if (session) {
+      return session;
+    }
+    await delay(300);
+  }
+  return null;
+}
+
+function delay(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
 }
 
 async function refreshAppData() {
