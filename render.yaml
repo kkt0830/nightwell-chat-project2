@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: nightwell-chat-project2
+    runtime: static
+    buildCommand: ""
+    staticPublishPath: .

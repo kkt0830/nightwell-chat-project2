@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nightwell Chat</title>
+    <meta
+      name="description"
+      content="일반 채팅과 랜덤 채팅을 함께 제공하는 다크 판타지 콘셉트의 채팅 프로토타입입니다."
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="script.js" defer></script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar warded-panel">
+        <div class="brand-lockup">
+          <div class="sigil" aria-hidden="true"></div>
+          <div>
+            <p class="eyebrow">Nightwell Chat</p>
+            <h1>익명 조우와 기록된 대화</h1>
+          </div>
+        </div>
+
+        <div class="topbar-actions">
+          <div class="session-chip">
+            <span class="session-dot"></span>
+            <span data-session-label>접속 전</span>
+          </div>
+          <button class="ghost-button" type="button" data-logout-button hidden>로그아웃</button>
+        </div>
+      </header>
+
+      <main>
+        <section class="auth-layout" data-auth-screen hidden>
+          <article class="warded-panel lore-panel">
+            <p class="eyebrow">Sealed Threshold</p>
+            <h2>두 개의 채팅 관문을 한 공간 안에 엮은 프로토타입</h2>
+            <p class="lead-copy">
+              일반 채팅은 친구 관계 위에서 열리고, 랜덤 채팅은 익명 닉네임으로 시작됩니다.
+              이 프로토타입은 로그인부터 친구 요청, 일반 1:1 채팅, 랜덤 1:1 매칭, 신고와 차단,
+              그리고 테마 전환까지 브라우저 안에서 직접 작동합니다.
+            </p>
+
+            <div class="ritual-list">
+              <div class="ritual-item">
+                <span class="ritual-rune">I</span>
+                <div>
+                  <strong>일반 채팅</strong>
+                  <p>친구 요청과 수락 이후 시작되는 기록형 대화입니다.</p>
+                </div>
+              </div>
+              <div class="ritual-item">
+                <span class="ritual-rune">II</span>
+                <div>
+                  <strong>랜덤 채팅</strong>
+                  <p>자동 닉네임과 기능 제한이 있는 익명 조우입니다.</p>
+                </div>
+              </div>
+              <div class="ritual-item">
+                <span class="ritual-rune">III</span>
+                <div>
+                  <strong>사용자 테마</strong>
+                  <p>선택한 테마가 채팅과 전체 프레임 색에 즉시 반영됩니다.</p>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="warded-panel auth-panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Access Altar</p>
+                <h2>대화창으로 연결 중</h2>
+              </div>
+            </div>
+
+            <p class="lead-copy auth-loading-copy" data-auth-status>
+              로그인창 없이 바로 게스트 모드로 입장하는 중입니다.
+            </p>
+
+            <button class="ghost-button auth-guest-button" type="button" data-retry-guest hidden>다시 시도</button>
+
+            <p class="hint-copy">
+              연결이 실패하면 Supabase의 Anonymous Sign-Ins 설정을 확인해야 합니다.
+            </p>
+          </article>
+        </section>
+
+        <section class="app-layout" data-app-screen>
+          <aside class="warded-panel sidebar-panel">
+            <div class="profile-summary">
+              <p class="eyebrow">Active Identity</p>
+              <h2 data-profile-name>사용자</h2>
+              <p class="profile-handle" data-profile-handle>@user</p>
+              <p class="profile-bio" data-profile-bio>소개가 아직 없습니다.</p>
+            </div>
+
+            <nav class="nav-list" aria-label="메인 내비게이션">
+              <button class="nav-button is-active" type="button" data-view-target="home">홈</button>
+              <button class="nav-button" type="button" data-view-target="general">일반 채팅</button>
+              <button class="nav-button" type="button" data-view-target="random">랜덤 채팅</button>
+              <button class="nav-button" type="button" data-view-target="profile">프로필 / 테마</button>
+            </nav>
+
+            <div class="sidebar-metrics">
+              <div>
+                <span>친구</span>
+                <strong data-friend-count>0</strong>
+              </div>
+              <div>
+                <span>진행 중 대화</span>
+                <strong data-room-count>0</strong>
+              </div>
+              <div>
+                <span>신고 기록</span>
+                <strong data-report-count>0</strong>
+              </div>
+            </div>
+          </aside>
+
+          <section class="content-stack">
+            <section class="view-section is-active" data-view="home">
+              <article class="warded-panel hero-panel">
+                <div>
+                  <p class="eyebrow">Home Chamber</p>
+                  <h2>어떤 방식으로 대화를 시작할지 선택하세요</h2>
+                  <p class="lead-copy">
+                    왼쪽 관문은 친구 관계 위의 일반 채팅이고, 오른쪽 관문은 익명 닉네임으로 입장하는
+                    랜덤 채팅입니다. 이 프로토타입에서는 두 흐름이 실제로 작동합니다.
+                  </p>
+                </div>
+
+                <div class="mode-grid">
+                  <button class="mode-tile" type="button" data-home-action="general">
+                    <span class="mode-kicker">General</span>
+                    <strong>일반 채팅</strong>
+                    <p>친구 요청, 수락, 1:1 메시지, 준비 중인 통화/파일/선물 버튼까지 확인할 수 있습니다.</p>
+                  </button>
+                  <button class="mode-tile" type="button" data-home-action="random">
+                    <span class="mode-kicker">Random</span>
+                    <strong>랜덤 채팅</strong>
+                    <p>익명 닉네임으로 매칭되고, 개인정보가 감춰진 1:1 대화를 바로 시작할 수 있습니다.</p>
+                  </button>
+                </div>
+              </article>
+
+              <div class="split-grid">
+                <article class="warded-panel summary-panel">
+                  <p class="eyebrow">Current State</p>
+                  <h2>현재 계정 요약</h2>
+                  <div class="summary-grid" data-home-summary></div>
+                </article>
+
+                <article class="warded-panel summary-panel">
+                  <p class="eyebrow">Recent Signals</p>
+                  <h2>최근 활동</h2>
+                  <div class="activity-list" data-home-activity></div>
+                </article>
+              </div>
+            </section>
+
+            <section class="view-section" data-view="general">
+              <div class="content-grid general-grid">
+                <article class="warded-panel list-panel">
+                  <div class="panel-head">
+                    <div>
+                      <p class="eyebrow">Friend Ledger</p>
+                      <h2>친구와 요청</h2>
+                    </div>
+                  </div>
+
+                  <div class="subsection">
+                    <p class="subheading">친구 목록</p>
+                    <div class="card-list" data-friend-list></div>
+                  </div>
+
+                  <div class="subsection">
+                    <p class="subheading">받은 요청</p>
+                    <div class="card-list" data-incoming-requests></div>
+                  </div>
+
+                  <div class="subsection">
+                    <p class="subheading">사용자 찾기</p>
+                    <div class="card-list" data-directory-list></div>
+                  </div>
+                </article>
+
+                <article class="warded-panel chat-panel">
+                  <div class="chat-room-head" data-general-room-head>
+                    <div>
+                      <p class="eyebrow">General Room</p>
+                      <h2>대화할 친구를 선택하세요</h2>
+                      <p class="chat-room-meta">친구 목록에서 대화를 열면 이 영역에 메시지가 표시됩니다.</p>
+                    </div>
+                  </div>
+
+                  <div class="message-feed" data-general-messages>
+                    <div class="empty-state">왼쪽 목록에서 친구를 선택하면 일반 채팅이 시작됩니다.</div>
+                  </div>
+
+                  <div class="utility-row">
+                    <button class="ghost-button" type="button" data-disabled-feature="file">파일</button>
+                    <button class="ghost-button" type="button" data-disabled-feature="call">통화</button>
+                    <button class="ghost-button" type="button" data-disabled-feature="gift">선물</button>
+                  </div>
+
+                  <form class="message-form" data-general-form>
+                    <input type="text" name="message" placeholder="친구에게 메시지를 보내세요." autocomplete="off" />
+                    <button class="primary-button" type="submit">전송</button>
+                  </form>
+                </article>
+              </div>
+            </section>
+
+            <section class="view-section" data-view="random">
+              <div class="content-grid random-grid">
+                <article class="warded-panel random-settings-panel">
+                  <div class="panel-head">
+                    <div>
+                      <p class="eyebrow">Random Gate</p>
+                      <h2>랜덤 채팅 설정</h2>
+                    </div>
+                  </div>
+
+                  <form class="stack-form" data-random-settings-form>
+                    <label>
+                      <span>인원 선택</span>
+                      <select name="targetSize" data-random-size>
+                        <option value="2">1:1</option>
+                        <option value="4">2:2 (준비 중)</option>
+                        <option value="3">3명 (준비 중)</option>
+                        <option value="5">4명 (준비 중)</option>
+                      </select>
+                    </label>
+                    <button class="primary-button" type="submit" data-random-start>매칭 시작</button>
+                  </form>
+
+                  <div class="notice-block">
+                    <strong>랜덤 채팅 규칙</strong>
+                    <ul>
+                      <li>익명 닉네임이 자동 생성됩니다.</li>
+                      <li>파일, 통화, 선물은 지원하지 않습니다.</li>
+                      <li>개인정보 공유는 피해야 합니다.</li>
+                    </ul>
+                  </div>
+
+                  <div class="matching-box" data-random-status>
+                    아직 매칭이 시작되지 않았습니다.
+                  </div>
+
+                  <div class="subsection">
+                    <p class="subheading">최근 랜덤 방</p>
+                    <div class="card-list" data-random-history></div>
+                  </div>
+                </article>
+
+                <article class="warded-panel chat-panel">
+                  <div class="chat-room-head" data-random-room-head>
+                    <div>
+                      <p class="eyebrow">Anonymous Room</p>
+                      <h2>익명 방이 아직 열리지 않았습니다</h2>
+                      <p class="chat-room-meta">매칭이 완료되면 상대 닉네임과 함께 이곳에 입장합니다.</p>
+                    </div>
+                  </div>
+
+                  <div class="message-feed" data-random-messages>
+                    <div class="empty-state">랜덤 매칭을 시작하면 익명 대화가 이 영역에 표시됩니다.</div>
+                  </div>
+
+                  <form class="message-form" data-random-form>
+                    <input type="text" name="message" placeholder="익명으로 메시지를 보내세요." autocomplete="off" />
+                    <button class="primary-button" type="submit">전송</button>
+                  </form>
+                </article>
+              </div>
+            </section>
+
+            <section class="view-section" data-view="profile">
+              <div class="content-grid profile-grid">
+                <article class="warded-panel auth-member-panel">
+                  <div class="panel-head">
+                    <div>
+                      <p class="eyebrow">Account Access</p>
+                      <h2 data-member-auth-title>회원 계정 연결</h2>
+                    </div>
+                  </div>
+
+                  <div class="segmented-control" role="tablist" aria-label="회원 인증 모드" data-member-auth-tabs>
+                    <button class="segment-button is-active" type="button" data-member-auth-mode="signin">로그인</button>
+                    <button class="segment-button" type="button" data-member-auth-mode="signup">회원가입</button>
+                  </div>
+
+                  <form class="stack-form" data-member-auth-form>
+                    <label>
+                      <span>이메일</span>
+                      <input type="email" name="email" autocomplete="email" />
+                    </label>
+                    <label>
+                      <span>비밀번호</span>
+                      <input type="password" name="password" autocomplete="current-password" minlength="4" />
+                    </label>
+                    <label data-member-signup-field hidden>
+                      <span>표시 이름</span>
+                      <input type="text" name="displayName" minlength="2" maxlength="20" placeholder="예: 달빛서기" />
+                    </label>
+                    <label data-member-signup-field hidden>
+                      <span>사용자 아이디</span>
+                      <input type="text" name="username" minlength="3" maxlength="18" placeholder="예: moon_scribe" />
+                    </label>
+                    <button class="primary-button" type="submit" data-member-auth-submit>로그인</button>
+                  </form>
+
+                  <div class="notice-block" data-member-auth-status>
+                    <strong>현재 상태</strong>
+                    <p>게스트 모드에서는 랜덤 채팅만 가능합니다. 회원 계정으로 로그인하면 일반 채팅과 친구 기능을 사용할 수 있습니다.</p>
+                  </div>
+                </article>
+
+                <article class="warded-panel profile-panel">
+                  <div class="panel-head">
+                    <div>
+                      <p class="eyebrow">Profile Codex</p>
+                      <h2>프로필 수정</h2>
+                    </div>
+                  </div>
+
+                  <form class="stack-form" data-profile-form>
+                    <label>
+                      <span>표시 이름</span>
+                      <input type="text" name="displayName" minlength="2" maxlength="20" required />
+                    </label>
+                    <label>
+                      <span>사용자 아이디</span>
+                      <input type="text" name="username" minlength="3" maxlength="18" required />
+                    </label>
+                    <label>
+                      <span>소개</span>
+                      <textarea name="bio" rows="4" maxlength="120" placeholder="간단한 소개를 입력하세요."></textarea>
+                    </label>
+                    <button class="primary-button" type="submit">저장</button>
+                  </form>
+                </article>
+
+                <article class="warded-panel theme-panel">
+                  <div class="panel-head">
+                    <div>
+                      <p class="eyebrow">Theme Archive</p>
+                      <h2>테마 선택</h2>
+                    </div>
+                  </div>
+                  <div class="theme-grid" data-theme-grid></div>
+                </article>
+
+                <article class="warded-panel utility-panel">
+                  <div class="panel-head">
+                    <div>
+                      <p class="eyebrow">Safety Ledger</p>
+                      <h2>차단 및 신고</h2>
+                    </div>
+                  </div>
+
+                  <div class="subsection">
+                    <p class="subheading">차단한 사용자</p>
+                    <div class="card-list" data-blocked-list></div>
+                  </div>
+
+                  <div class="subsection">
+                    <p class="subheading">내 신고 기록</p>
+                    <div class="card-list" data-report-list></div>
+                  </div>
+                </article>
+              </div>
+            </section>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div class="modal-backdrop" data-report-modal hidden>
+      <div class="modal-panel warded-panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Report Chamber</p>
+            <h2>신고하기</h2>
+          </div>
+          <button class="ghost-button" type="button" data-close-report>닫기</button>
+        </div>
+
+        <form class="stack-form" data-report-form>
+          <input type="hidden" name="targetId" />
+          <input type="hidden" name="roomId" />
+          <label>
+            <span>신고 대상</span>
+            <input type="text" name="targetLabel" readonly />
+          </label>
+          <label>
+            <span>사유</span>
+            <select name="category" required>
+              <option value="abuse">욕설 / 괴롭힘</option>
+              <option value="spam">스팸</option>
+              <option value="sexual">부적절한 발언</option>
+              <option value="other">기타</option>
+            </select>
+          </label>
+          <label>
+            <span>상세 내용</span>
+            <textarea name="description" rows="4" maxlength="240" placeholder="상세 내용을 입력하세요."></textarea>
+          </label>
+          <button class="primary-button" type="submit">신고 제출</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="toast" hidden data-toast></div>
+  </body>
+</html>
