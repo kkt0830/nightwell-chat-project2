@@ -719,6 +719,11 @@ p {
   gap: 16px;
 }
 
+.report-grid {
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
 .list-panel,
 .random-settings-panel,
 .profile-panel,
@@ -1042,7 +1047,12 @@ select:focus-visible {
   }
 
   .profile-grid {
-    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr) minmax(0, 0.9fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .report-grid {
+    grid-template-columns: minmax(0, 0.95fr);
+    justify-content: start;
   }
 
   .sidebar-panel {

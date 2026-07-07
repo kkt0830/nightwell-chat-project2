@@ -24,6 +24,7 @@ const uiState = {
   activeRandomMessages: [],
   pollTimer: null,
   autoSigningIn: false,
+  autoJoiningRandom: false,
   realtimeChannel: null,
 };
 
@@ -236,8 +237,38 @@ async function handleSessionChange(session) {
   }
 
   await refreshAppData();
+  await ensureGuestRandomReady();
   startPolling();
   startRealtime();
+}
+
+async function ensureGuestRandomReady() {
+  if (!uiState.profile || !isGuestMode()) {
+    return;
+  }
+
+  uiState.currentView = "random";
+
+  if (uiState.activeRandomRoomId || uiState.randomQueue || uiState.autoJoiningRandom) {
+    renderSignedIn();
+    return;
+  }
+
+  uiState.autoJoiningRandom = true;
+  const { data, error } = await supabaseClient.rpc("chat_join_random_queue", { p_target_size: 2 });
+  uiState.autoJoiningRandom = false;
+
+  if (error) {
+    showToast(getReadableError(error));
+    renderSignedIn();
+    return;
+  }
+
+  if (data) {
+    uiState.activeRandomRoomId = data;
+  }
+
+  await refreshAppData();
 }
 
 function resetSignedInState() {
@@ -253,7 +284,7 @@ function resetSignedInState() {
   uiState.activeRandomRoomId = null;
   uiState.activeGeneralMessages = [];
   uiState.activeRandomMessages = [];
-  uiState.currentView = "home";
+  uiState.currentView = "random";
   applyThemeById("moon-violet");
 }
 
@@ -261,6 +292,7 @@ function renderLoggedOut() {
   elements.authScreen.hidden = true;
   elements.appScreen.hidden = false;
   elements.logoutButton.hidden = true;
+  uiState.currentView = "random";
   elements.sessionLabel.textContent = uiState.autoSigningIn ? "게스트 연결 중" : "게스트 연결 대기";
   renderWaitingApp();
 }
@@ -448,6 +480,9 @@ function renderSignedIn() {
   elements.authScreen.hidden = true;
   elements.appScreen.hidden = false;
   elements.logoutButton.hidden = false;
+  if (isGuestMode() && (uiState.currentView === "home" || uiState.currentView === "general")) {
+    uiState.currentView = "random";
+  }
   elements.sessionLabel.textContent = isGuestMode() ? `${profile.display_name} 게스트` : `${profile.display_name} 접속 중`;
 
   renderSidebar();
@@ -652,11 +687,13 @@ function renderGeneralRoom() {
 
 function renderRandom() {
   if (!uiState.profile) {
-    elements.randomStartButton.textContent = "매칭 시작";
+    elements.randomStartButton.textContent = uiState.autoSigningIn ? "게스트 연결 중" : "매칭 시작";
     elements.randomStartButton.disabled = true;
     elements.randomSize.value = "2";
     elements.randomSize.disabled = true;
-    elements.randomStatus.textContent = "게스트 세션이 연결되면 실제 랜덤 매칭을 시작할 수 있습니다.";
+    elements.randomStatus.textContent = uiState.autoSigningIn
+      ? "게스트 세션을 생성하는 중입니다. 연결되면 자동으로 랜덤 채팅이 활성화됩니다."
+      : "게스트 세션이 연결되면 실제 랜덤 매칭을 시작할 수 있습니다.";
     elements.randomHistory.innerHTML = '<div class="empty-state">연결 후 랜덤 채팅 기록이 표시됩니다.</div>';
     elements.randomRoomHead.innerHTML = `
       <div>
@@ -673,10 +710,10 @@ function renderRandom() {
   }
 
   const queueing = Boolean(uiState.randomQueue);
-  elements.randomStartButton.textContent = queueing ? "매칭 취소" : "매칭 시작";
+  elements.randomStartButton.textContent = queueing ? "매칭 취소" : isGuestMode() ? "자동 매칭 대기" : "매칭 시작";
   elements.randomStartButton.disabled = false;
   elements.randomSize.value = "2";
-  elements.randomSize.disabled = queueing;
+  elements.randomSize.disabled = queueing || isGuestMode() || uiState.autoJoiningRandom;
 
   if (isGuestMode()) {
     elements.randomStatus.textContent = queueing

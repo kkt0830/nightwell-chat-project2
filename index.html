@@ -102,6 +102,7 @@
               <button class="nav-button" type="button" data-view-target="general">일반 채팅</button>
               <button class="nav-button" type="button" data-view-target="random">랜덤 채팅</button>
               <button class="nav-button" type="button" data-view-target="profile">프로필 / 테마</button>
+              <button class="nav-button" type="button" data-view-target="report">신고 / 차단</button>
             </nav>
 
             <div class="sidebar-metrics">
@@ -279,7 +280,7 @@
 
             <section class="view-section" data-view="profile">
               <div class="content-grid profile-grid">
-                <article class="warded-panel auth-member-panel">
+                <article class="warded-panel auth-member-panel" hidden>
                   <div class="panel-head">
                     <div>
                       <p class="eyebrow">Account Access</p>
@@ -353,11 +354,16 @@
                   <div class="theme-grid" data-theme-grid></div>
                 </article>
 
+              </div>
+            </section>
+
+            <section class="view-section" data-view="report">
+              <div class="content-grid report-grid">
                 <article class="warded-panel utility-panel">
                   <div class="panel-head">
                     <div>
                       <p class="eyebrow">Safety Ledger</p>
-                      <h2>차단 및 신고</h2>
+                      <h2>신고 및 차단 관리</h2>
                     </div>
                   </div>
 
