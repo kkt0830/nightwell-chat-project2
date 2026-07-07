@@ -141,7 +141,7 @@ const elements = {
   randomRoomHead: document.querySelector("[data-random-room-head]"),
   randomMessages: document.querySelector("[data-random-messages]"),
   randomForm: document.querySelector("[data-random-form]"),
-  memberAuthTitle: document.querySelector("[data-member-auth-title]"),
+  memberAuthTitle: document.querySelector("[data-member-auth-title]") || document.querySelector("[data-auth-title]"),
   memberAuthForm: document.querySelector("[data-member-auth-form]"),
   memberAuthSubmit: document.querySelector("[data-member-auth-submit]"),
   memberAuthModeButtons: document.querySelectorAll("[data-member-auth-mode]"),
@@ -210,25 +210,25 @@ function bindEvents() {
     button.addEventListener("click", () => showToast(`${button.textContent} 기능은 아직 준비 중입니다.`));
   }
 
-  elements.retryGuestButton.addEventListener("click", () => ensureGuestSession(true));
-  elements.logoutButton.addEventListener("click", handleLogout);
-  elements.memberAuthForm.addEventListener("submit", handleMemberAuthSubmit);
-  elements.generalForm.addEventListener("submit", handleGeneralMessageSubmit);
-  elements.randomSettingsForm.addEventListener("submit", handleRandomQueueSubmit);
-  elements.randomForm.addEventListener("submit", handleRandomMessageSubmit);
-  elements.profileForm.addEventListener("submit", handleProfileSave);
-  elements.themeGrid.addEventListener("click", handleThemeClick);
-  elements.friendList.addEventListener("click", handleFriendListClick);
-  elements.incomingRequests.addEventListener("click", handleIncomingRequestClick);
-  elements.directoryList.addEventListener("click", handleDirectoryClick);
-  elements.blockedList.addEventListener("click", handleBlockedListClick);
-  elements.randomHistory.addEventListener("click", handleRandomHistoryClick);
-  elements.generalRoomHead.addEventListener("click", handleRoomHeaderClick);
-  elements.randomRoomHead.addEventListener("click", handleRoomHeaderClick);
-  elements.reportList.addEventListener("click", handleReportListClick);
-  elements.reportForm.addEventListener("submit", handleReportSubmit);
-  elements.closeReport.addEventListener("click", closeReportModal);
-  elements.reportModal.addEventListener("click", (event) => {
+  elements.retryGuestButton?.addEventListener("click", () => ensureGuestSession(true));
+  elements.logoutButton?.addEventListener("click", handleLogout);
+  elements.memberAuthForm?.addEventListener("submit", handleMemberAuthSubmit);
+  elements.generalForm?.addEventListener("submit", handleGeneralMessageSubmit);
+  elements.randomSettingsForm?.addEventListener("submit", handleRandomQueueSubmit);
+  elements.randomForm?.addEventListener("submit", handleRandomMessageSubmit);
+  elements.profileForm?.addEventListener("submit", handleProfileSave);
+  elements.themeGrid?.addEventListener("click", handleThemeClick);
+  elements.friendList?.addEventListener("click", handleFriendListClick);
+  elements.incomingRequests?.addEventListener("click", handleIncomingRequestClick);
+  elements.directoryList?.addEventListener("click", handleDirectoryClick);
+  elements.blockedList?.addEventListener("click", handleBlockedListClick);
+  elements.randomHistory?.addEventListener("click", handleRandomHistoryClick);
+  elements.generalRoomHead?.addEventListener("click", handleRoomHeaderClick);
+  elements.randomRoomHead?.addEventListener("click", handleRoomHeaderClick);
+  elements.reportList?.addEventListener("click", handleReportListClick);
+  elements.reportForm?.addEventListener("submit", handleReportSubmit);
+  elements.closeReport?.addEventListener("click", closeReportModal);
+  elements.reportModal?.addEventListener("click", (event) => {
     if (event.target === elements.reportModal) {
       closeReportModal();
     }
@@ -632,8 +632,12 @@ function setMemberAuthMode(mode) {
   for (const field of elements.memberSignupFields) {
     field.hidden = mode !== "signup";
   }
-  elements.memberAuthTitle.textContent = mode === "signup" ? "회원가입" : "회원 로그인";
-  elements.memberAuthSubmit.textContent = mode === "signup" ? "회원가입" : "로그인";
+  if (elements.memberAuthTitle) {
+    elements.memberAuthTitle.textContent = mode === "signup" ? "회원가입" : "회원 로그인";
+  }
+  if (elements.memberAuthSubmit) {
+    elements.memberAuthSubmit.textContent = mode === "signup" ? "회원가입" : "로그인";
+  }
 }
 
 function renderMemberAuthCard() {
