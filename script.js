@@ -1,6 +1,8 @@
 const SUPABASE_URL = "https://xzuribmvvluqdcndfqko.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_O-WfjZ0K3JAe_TQ3YTHgIw_gFXD5JrX";
 const POLL_INTERVAL_MS = 3000;
+const PUBLIC_GUEST_ID_KEY = "nightwell-public-guest-id";
+const PUBLIC_GUEST_NAME_KEY = "nightwell-public-guest-name";
 
 const supabaseClient = window.supabase?.createClient
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
@@ -11,6 +13,7 @@ const uiState = {
   memberAuthMode: "signin",
   session: null,
   profile: null,
+  publicGuest: null,
   friendships: [],
   directoryProfiles: [],
   rooms: [],
@@ -175,10 +178,18 @@ async function bootstrap() {
   const {
     data: { session },
   } = await supabaseClient.auth.getSession();
-  await handleSessionChange(session);
+  if (session) {
+    await handleSessionChange(session);
+  } else {
+    await initializePublicGuestMode();
+  }
 
   supabaseClient.auth.onAuthStateChange(async (_event, session) => {
-    await handleSessionChange(session);
+    if (session) {
+      await handleSessionChange(session);
+    } else {
+      await initializePublicGuestMode();
+    }
   });
 }
 
@@ -226,13 +237,13 @@ function bindEvents() {
 
 async function handleSessionChange(session) {
   uiState.session = session;
+  uiState.publicGuest = null;
   stopPolling();
   stopRealtime();
 
   if (!session) {
     resetSignedInState();
-    renderLoggedOut();
-    await ensureGuestSession();
+    await initializePublicGuestMode();
     return;
   }
 
@@ -240,6 +251,44 @@ async function handleSessionChange(session) {
   await ensureGuestRandomReady();
   startPolling();
   startRealtime();
+}
+
+async function initializePublicGuestMode() {
+  stopPolling();
+  stopRealtime();
+  resetSignedInState();
+  uiState.session = null;
+  uiState.publicGuest = ensurePublicGuestIdentity();
+  uiState.profile = {
+    user_id: uiState.publicGuest.guestId,
+    display_name: uiState.publicGuest.guestName,
+    username: `guest_${uiState.publicGuest.guestId.slice(0, 6)}`,
+    bio: "게스트 랜덤 채팅 모드",
+    theme_id: "moon-violet",
+    is_guest: true,
+    public_guest: true,
+  };
+  uiState.currentView = "random";
+  await refreshPublicGuestData();
+  await ensureGuestRandomReady();
+  startPolling();
+}
+
+function ensurePublicGuestIdentity() {
+  let guestId = localStorage.getItem(PUBLIC_GUEST_ID_KEY);
+  let guestName = localStorage.getItem(PUBLIC_GUEST_NAME_KEY);
+
+  if (!guestId) {
+    guestId = `guest_${crypto.randomUUID()}`;
+    localStorage.setItem(PUBLIC_GUEST_ID_KEY, guestId);
+  }
+
+  if (!guestName) {
+    guestName = `게스트 ${randomLabel()}`;
+    localStorage.setItem(PUBLIC_GUEST_NAME_KEY, guestName);
+  }
+
+  return { guestId, guestName };
 }
 
 async function ensureGuestRandomReady() {
@@ -255,7 +304,12 @@ async function ensureGuestRandomReady() {
   }
 
   uiState.autoJoiningRandom = true;
-  const { data, error } = await supabaseClient.rpc("chat_join_random_queue", { p_target_size: 2 });
+  const { data, error } = isPublicGuestMode()
+    ? await supabaseClient.rpc("chat_public_join_random_queue", {
+        p_guest_id: uiState.publicGuest.guestId,
+        p_guest_name: uiState.publicGuest.guestName,
+      })
+    : await supabaseClient.rpc("chat_join_random_queue", { p_target_size: 2 });
   uiState.autoJoiningRandom = false;
 
   if (error) {
@@ -268,11 +322,16 @@ async function ensureGuestRandomReady() {
     uiState.activeRandomRoomId = data;
   }
 
-  await refreshAppData();
+  if (isPublicGuestMode()) {
+    await refreshPublicGuestData();
+  } else {
+    await refreshAppData();
+  }
 }
 
 function resetSignedInState() {
   uiState.profile = null;
+  uiState.publicGuest = null;
   uiState.friendships = [];
   uiState.directoryProfiles = [];
   uiState.rooms = [];
@@ -487,6 +546,42 @@ async function refreshAppData() {
   uiState.activeRandomMessages = randomMessages;
 
   applyThemeById(profile.theme_id || "moon-violet");
+  renderSignedIn();
+}
+
+async function refreshPublicGuestData() {
+  if (!uiState.publicGuest) {
+    renderLoggedOut();
+    return;
+  }
+
+  const guestId = uiState.publicGuest.guestId;
+  const [queueRow, roomMembersForMe] = await Promise.all([
+    fetchPublicGuestQueue(guestId),
+    fetchPublicGuestRoomMemberships(guestId),
+  ]);
+
+  const roomIds = roomMembersForMe.map((entry) => entry.room_id);
+  const [rooms, roomMembers] = await Promise.all([
+    roomIds.length ? fetchPublicGuestRooms(roomIds) : Promise.resolve([]),
+    roomIds.length ? fetchPublicGuestRoomMembers(roomIds) : Promise.resolve([]),
+  ]);
+
+  uiState.friendships = [];
+  uiState.directoryProfiles = [];
+  uiState.blocks = [];
+  uiState.reports = [];
+  uiState.randomQueue = queueRow;
+  uiState.rooms = rooms;
+  uiState.roomMembers = roomMembers;
+
+  syncActiveRooms();
+
+  uiState.activeGeneralMessages = [];
+  uiState.activeRandomMessages = uiState.activeRandomRoomId
+    ? await fetchPublicGuestRoomMessages(uiState.activeRandomRoomId)
+    : [];
+
   renderSignedIn();
 }
 
@@ -811,10 +906,10 @@ function renderProfile() {
   getFormControl(elements.profileForm, "displayName").value = profile.display_name;
   getFormControl(elements.profileForm, "username").value = profile.username;
   getFormControl(elements.profileForm, "bio").value = profile.bio || "";
-  getFormControl(elements.profileForm, "displayName").disabled = false;
+  getFormControl(elements.profileForm, "displayName").disabled = isPublicGuestMode();
   getFormControl(elements.profileForm, "username").disabled = isGuestMode();
-  getFormControl(elements.profileForm, "bio").disabled = false;
-  elements.profileForm.querySelector("button").disabled = false;
+  getFormControl(elements.profileForm, "bio").disabled = isPublicGuestMode();
+  elements.profileForm.querySelector("button").disabled = isPublicGuestMode();
 
   elements.themeGrid.innerHTML = themeCatalog
     .map(
@@ -896,6 +991,14 @@ function setView(view) {
 }
 
 async function handleLogout() {
+  if (isPublicGuestMode()) {
+    localStorage.removeItem(PUBLIC_GUEST_ID_KEY);
+    localStorage.removeItem(PUBLIC_GUEST_NAME_KEY);
+    await initializePublicGuestMode();
+    showToast("새 게스트로 다시 시작했습니다.");
+    return;
+  }
+
   const { error } = await supabaseClient.auth.signOut();
   if (error) {
     showToast(getReadableError(error));
@@ -1003,19 +1106,30 @@ async function handleRandomMessageSubmit(event) {
     return;
   }
 
-  const { error } = await supabaseClient.from("chat_messages").insert({
-    room_id: roomId,
-    sender_id: uiState.profile.user_id,
-    message_type: "text",
-    body,
-  });
+  const { error } = isPublicGuestMode()
+    ? await supabaseClient.from("chat_public_messages").insert({
+        room_id: roomId,
+        sender_id: uiState.profile.user_id,
+        message_type: "text",
+        body,
+      })
+    : await supabaseClient.from("chat_messages").insert({
+        room_id: roomId,
+        sender_id: uiState.profile.user_id,
+        message_type: "text",
+        body,
+      });
 
   if (error) {
     showToast(getReadableError(error));
     return;
   }
   getFormControl(elements.randomForm, "message").value = "";
-  await refreshAppData();
+  if (isPublicGuestMode()) {
+    await refreshPublicGuestData();
+  } else {
+    await refreshAppData();
+  }
 }
 
 async function handleRandomQueueSubmit(event) {
@@ -1026,33 +1140,57 @@ async function handleRandomQueueSubmit(event) {
   }
 
   if (uiState.randomQueue) {
-    const { error } = await supabaseClient.rpc("chat_leave_random_queue");
+    const { error } = isPublicGuestMode()
+      ? await supabaseClient.rpc("chat_public_leave_random_queue", { p_guest_id: uiState.publicGuest.guestId })
+      : await supabaseClient.rpc("chat_leave_random_queue");
     if (error) {
       showToast(getReadableError(error));
       return;
     }
-    await refreshAppData();
+    if (isPublicGuestMode()) {
+      await refreshPublicGuestData();
+    } else {
+      await refreshAppData();
+    }
     showToast("랜덤 매칭 대기를 취소했습니다.");
     return;
   }
 
-  const { data, error } = await supabaseClient.rpc("chat_join_random_queue", { p_target_size: 2 });
+  const { data, error } = isPublicGuestMode()
+    ? await supabaseClient.rpc("chat_public_join_random_queue", {
+        p_guest_id: uiState.publicGuest.guestId,
+        p_guest_name: uiState.publicGuest.guestName,
+      })
+    : await supabaseClient.rpc("chat_join_random_queue", { p_target_size: 2 });
   if (error) {
     showToast(getReadableError(error));
     return;
   }
   if (data) {
     uiState.activeRandomRoomId = data;
-    await refreshAppData();
+    if (isPublicGuestMode()) {
+      await refreshPublicGuestData();
+    } else {
+      await refreshAppData();
+    }
     showToast("랜덤 채팅방에 입장했습니다.");
     return;
   }
-  await refreshAppData();
+  if (isPublicGuestMode()) {
+    await refreshPublicGuestData();
+  } else {
+    await refreshAppData();
+  }
   showToast("매칭 대기열에 등록되었습니다.");
 }
 
 async function handleProfileSave(event) {
   event.preventDefault();
+  if (isPublicGuestMode()) {
+    showToast("공개 게스트 모드에서는 프로필 저장을 지원하지 않습니다.");
+    return;
+  }
+
   const displayName = getFormControl(elements.profileForm, "displayName").value.trim();
   const username = normalizeUsername(getFormControl(elements.profileForm, "username").value);
   const bio = getFormControl(elements.profileForm, "bio").value.trim();
@@ -1086,6 +1224,14 @@ async function handleThemeClick(event) {
   }
 
   const themeId = button.dataset.themeId;
+  if (isPublicGuestMode()) {
+    uiState.profile.theme_id = themeId;
+    applyThemeById(themeId);
+    renderProfile();
+    showToast("게스트 테마를 이 기기에서만 적용했습니다.");
+    return;
+  }
+
   const { error } = await supabaseClient.from("chat_profiles").update({ theme_id: themeId }).eq("user_id", uiState.profile.user_id);
   if (error) {
     showToast(getReadableError(error));
@@ -1304,12 +1450,19 @@ async function blockUser(targetUserId) {
 }
 
 async function closeRoom(roomId, toast = true) {
-  const { error } = await supabaseClient.rpc("chat_close_room", { p_room_id: roomId });
+  const { error } = isPublicGuestMode()
+    ? await supabaseClient.rpc("chat_public_close_room", { p_room_id: roomId, p_guest_id: uiState.publicGuest.guestId })
+    : await supabaseClient.rpc("chat_close_room", { p_room_id: roomId });
   if (error) {
     showToast(getReadableError(error));
     return;
   }
-  await refreshAppData();
+  if (isPublicGuestMode()) {
+    await refreshPublicGuestData();
+    await ensureGuestRandomReady();
+  } else {
+    await refreshAppData();
+  }
   if (toast) {
     showToast("채팅방을 종료했습니다.");
   }
@@ -1425,6 +1578,55 @@ async function fetchMyQueue(userId) {
   return data;
 }
 
+async function fetchPublicGuestQueue(guestId) {
+  const { data, error } = await supabaseClient.from("chat_public_queue").select("*").eq("guest_id", guestId).maybeSingle();
+  if (error) {
+    showToast(getReadableError(error));
+    return null;
+  }
+  return data;
+}
+
+async function fetchPublicGuestRoomMemberships(guestId) {
+  const { data, error } = await supabaseClient.from("chat_public_room_members").select("room_id, user_id, alias").eq("user_id", guestId);
+  if (error) {
+    showToast(getReadableError(error));
+    return [];
+  }
+  return data || [];
+}
+
+async function fetchPublicGuestRooms(roomIds) {
+  const { data, error } = await supabaseClient.from("chat_public_rooms").select("*").in("id", roomIds).order("created_at", { ascending: false });
+  if (error) {
+    showToast(getReadableError(error));
+    return [];
+  }
+  return data || [];
+}
+
+async function fetchPublicGuestRoomMembers(roomIds) {
+  const { data, error } = await supabaseClient.from("chat_public_room_members").select("*").in("room_id", roomIds);
+  if (error) {
+    showToast(getReadableError(error));
+    return [];
+  }
+  return data || [];
+}
+
+async function fetchPublicGuestRoomMessages(roomId) {
+  const { data, error } = await supabaseClient
+    .from("chat_public_messages")
+    .select("*")
+    .eq("room_id", roomId)
+    .order("created_at", { ascending: true });
+  if (error) {
+    showToast(getReadableError(error));
+    return [];
+  }
+  return data || [];
+}
+
 async function fetchMyRoomMemberships(userId) {
   if (!supabaseClient) {
     return [];
@@ -1480,7 +1682,13 @@ async function fetchRoomMessages(roomId) {
 function startPolling() {
   stopPolling();
   uiState.pollTimer = window.setInterval(() => {
-    refreshAppData();
+    if (uiState.session?.user) {
+      refreshAppData();
+      return;
+    }
+    if (uiState.publicGuest) {
+      refreshPublicGuestData().then(() => ensureGuestRandomReady());
+    }
   }, POLL_INTERVAL_MS);
 }
 
@@ -1516,6 +1724,10 @@ function stopRealtime() {
 
 function isGuestMode() {
   return Boolean(uiState.profile?.is_guest);
+}
+
+function isPublicGuestMode() {
+  return Boolean(uiState.profile?.public_guest);
 }
 
 function getAcceptedFriendships() {
@@ -1581,6 +1793,23 @@ function getRandomRooms() {
 function getProfileById(userId) {
   if (!userId) {
     return null;
+  }
+  if (isPublicGuestMode()) {
+    if (uiState.profile?.user_id === userId) {
+      return uiState.profile;
+    }
+    const member = uiState.roomMembers.find((entry) => entry.user_id === userId);
+    if (member) {
+      return {
+        user_id: member.user_id,
+        display_name: member.alias,
+        username: member.user_id.slice(0, 12),
+        bio: "공개 게스트 모드",
+        theme_id: "moon-violet",
+        is_guest: true,
+        public_guest: true,
+      };
+    }
   }
   const allProfiles = [uiState.profile, ...uiState.directoryProfiles];
   return allProfiles.find((entry) => entry?.user_id === userId) || null;

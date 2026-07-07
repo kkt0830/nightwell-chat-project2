@@ -627,3 +627,238 @@ grant execute on function public.chat_open_general_room(uuid) to authenticated;
 grant execute on function public.chat_join_random_queue(integer) to authenticated;
 grant execute on function public.chat_leave_random_queue() to authenticated;
 grant execute on function public.chat_close_room(uuid) to authenticated;
+
+create table if not exists public.chat_public_queue (
+  guest_id text primary key,
+  guest_name text not null,
+  queued_at timestamptz not null default timezone('utc', now()),
+  constraint chat_public_queue_guest_id_length check (char_length(guest_id) between 8 and 64),
+  constraint chat_public_queue_guest_name_length check (char_length(guest_name) between 2 and 30)
+);
+
+create table if not exists public.chat_public_rooms (
+  id uuid primary key default gen_random_uuid(),
+  room_type text not null default 'random' check (room_type = 'random'),
+  status text not null default 'active' check (status in ('active', 'closed')),
+  pair_key text not null unique,
+  created_at timestamptz not null default timezone('utc', now()),
+  closed_at timestamptz
+);
+
+create table if not exists public.chat_public_room_members (
+  room_id uuid not null references public.chat_public_rooms (id) on delete cascade,
+  user_id text not null,
+  alias text not null,
+  joined_at timestamptz not null default timezone('utc', now()),
+  primary key (room_id, user_id),
+  constraint chat_public_room_members_user_id_length check (char_length(user_id) between 8 and 64),
+  constraint chat_public_room_members_alias_length check (char_length(alias) between 2 and 30)
+);
+
+create table if not exists public.chat_public_messages (
+  id uuid primary key default gen_random_uuid(),
+  room_id uuid not null references public.chat_public_rooms (id) on delete cascade,
+  sender_id text,
+  message_type text not null default 'text' check (message_type in ('text', 'system')),
+  body text not null,
+  created_at timestamptz not null default timezone('utc', now()),
+  constraint chat_public_messages_body_length check (char_length(body) between 1 and 1000)
+);
+
+create index if not exists chat_public_queue_lookup_idx on public.chat_public_queue (queued_at);
+create index if not exists chat_public_room_members_user_idx on public.chat_public_room_members (user_id);
+create index if not exists chat_public_messages_room_created_idx on public.chat_public_messages (room_id, created_at);
+
+create or replace function public.chat_public_make_pair_key(p_guest_a text, p_guest_b text)
+returns text
+language sql
+immutable
+set search_path = public
+as $$
+  select least(p_guest_a, p_guest_b) || ':' || greatest(p_guest_a, p_guest_b);
+$$;
+
+create or replace function public.chat_public_join_random_queue(p_guest_id text, p_guest_name text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_partner_id text;
+  v_partner_name text;
+  v_room_id uuid;
+  v_pair_key text;
+  v_alias_self text;
+  v_alias_partner text;
+begin
+  insert into public.chat_public_queue (guest_id, guest_name, queued_at)
+  values (p_guest_id, left(p_guest_name, 30), timezone('utc', now()))
+  on conflict (guest_id) do update
+    set guest_name = excluded.guest_name,
+        queued_at = excluded.queued_at;
+
+  select q.guest_id, q.guest_name
+  into v_partner_id, v_partner_name
+  from public.chat_public_queue q
+  where q.guest_id <> p_guest_id
+  order by q.queued_at asc
+  limit 1
+  for update skip locked;
+
+  if v_partner_id is null then
+    return null;
+  end if;
+
+  v_pair_key := public.chat_public_make_pair_key(p_guest_id, v_partner_id);
+
+  insert into public.chat_public_rooms (pair_key)
+  values (v_pair_key)
+  on conflict (pair_key) do update
+    set status = 'active',
+        closed_at = null
+  returning id into v_room_id;
+
+  delete from public.chat_public_queue where guest_id in (p_guest_id, v_partner_id);
+
+  v_alias_self := left(p_guest_name, 30);
+  v_alias_partner := left(v_partner_name, 30);
+
+  insert into public.chat_public_room_members (room_id, user_id, alias)
+  values
+    (v_room_id, p_guest_id, v_alias_self),
+    (v_room_id, v_partner_id, v_alias_partner)
+  on conflict (room_id, user_id) do update
+    set alias = excluded.alias;
+
+  if not exists (
+    select 1 from public.chat_public_messages m where m.room_id = v_room_id
+  ) then
+    insert into public.chat_public_messages (room_id, sender_id, message_type, body)
+    values (v_room_id, null, 'system', '익명 랜덤 채팅이 시작되었습니다. 개인정보를 공유하지 마세요.');
+  end if;
+
+  return v_room_id;
+end;
+$$;
+
+create or replace function public.chat_public_leave_random_queue(p_guest_id text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from public.chat_public_queue where guest_id = p_guest_id;
+end;
+$$;
+
+create or replace function public.chat_public_close_room(p_room_id uuid, p_guest_id text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (
+    select 1
+    from public.chat_public_room_members m
+    where m.room_id = p_room_id
+      and m.user_id = p_guest_id
+  ) then
+    raise exception 'Room membership required';
+  end if;
+
+  update public.chat_public_rooms
+  set status = 'closed',
+      closed_at = timezone('utc', now())
+  where id = p_room_id;
+end;
+$$;
+
+alter table public.chat_public_queue enable row level security;
+alter table public.chat_public_rooms enable row level security;
+alter table public.chat_public_room_members enable row level security;
+alter table public.chat_public_messages enable row level security;
+
+drop policy if exists "chat public queue open read" on public.chat_public_queue;
+create policy "chat public queue open read"
+on public.chat_public_queue
+for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "chat public queue open insert" on public.chat_public_queue;
+create policy "chat public queue open insert"
+on public.chat_public_queue
+for insert
+to anon, authenticated
+with check (true);
+
+drop policy if exists "chat public queue open update" on public.chat_public_queue;
+create policy "chat public queue open update"
+on public.chat_public_queue
+for update
+to anon, authenticated
+using (true)
+with check (true);
+
+drop policy if exists "chat public queue open delete" on public.chat_public_queue;
+create policy "chat public queue open delete"
+on public.chat_public_queue
+for delete
+to anon, authenticated
+using (true);
+
+drop policy if exists "chat public rooms open read" on public.chat_public_rooms;
+create policy "chat public rooms open read"
+on public.chat_public_rooms
+for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "chat public room members open read" on public.chat_public_room_members;
+create policy "chat public room members open read"
+on public.chat_public_room_members
+for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "chat public room members open insert" on public.chat_public_room_members;
+create policy "chat public room members open insert"
+on public.chat_public_room_members
+for insert
+to anon, authenticated
+with check (true);
+
+drop policy if exists "chat public room members open update" on public.chat_public_room_members;
+create policy "chat public room members open update"
+on public.chat_public_room_members
+for update
+to anon, authenticated
+using (true)
+with check (true);
+
+drop policy if exists "chat public messages open read" on public.chat_public_messages;
+create policy "chat public messages open read"
+on public.chat_public_messages
+for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "chat public messages open insert" on public.chat_public_messages;
+create policy "chat public messages open insert"
+on public.chat_public_messages
+for insert
+to anon, authenticated
+with check (true);
+
+grant select, insert, update, delete on public.chat_public_queue to anon, authenticated;
+grant select on public.chat_public_rooms to anon, authenticated;
+grant select, insert, update on public.chat_public_room_members to anon, authenticated;
+grant select, insert on public.chat_public_messages to anon, authenticated;
+
+revoke execute on function public.chat_public_make_pair_key(text, text) from public, anon, authenticated;
+grant execute on function public.chat_public_join_random_queue(text, text) to anon, authenticated;
+grant execute on function public.chat_public_leave_random_queue(text) to anon, authenticated;
+grant execute on function public.chat_public_close_room(uuid, text) to anon, authenticated;
