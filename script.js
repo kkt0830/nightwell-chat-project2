@@ -1186,6 +1186,10 @@ async function handleRandomQueueSubmit(event) {
 
 async function handleProfileSave(event) {
   event.preventDefault();
+  if (!uiState.profile) {
+    showToast("프로필이 아직 준비되지 않았습니다.");
+    return;
+  }
   if (isPublicGuestMode()) {
     showToast("공개 게스트 모드에서는 프로필 저장을 지원하지 않습니다.");
     return;
@@ -1220,6 +1224,10 @@ async function handleProfileSave(event) {
 async function handleThemeClick(event) {
   const button = event.target.closest("[data-theme-id]");
   if (!button) {
+    return;
+  }
+  if (!uiState.profile) {
+    showToast("프로필이 아직 준비되지 않았습니다.");
     return;
   }
 
@@ -2052,6 +2060,9 @@ function isDuplicateError(error) {
 }
 
 function showToast(message) {
+  if (!elements.toast) {
+    return;
+  }
   clearTimeout(toastTimer);
   elements.toast.textContent = message;
   elements.toast.hidden = false;
